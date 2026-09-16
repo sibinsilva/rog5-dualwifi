@@ -8,10 +8,13 @@ object RootShell {
     // Use sh as the launcher - it resolves PATH for us and avoids ProcessBuilder PATH limitations
     private val SH = "/system/bin/sh"
 
-    // Probe which su variant supports mount-master (-M flag) once at startup
+    // Absolute path to su - must be hardcoded since app's sh PATH strips it
+    private const val SU = "/system/bin/su"
+
+    // Probe whether su supports mount-master (-M) once at startup
     private val mountMasterFlag: Boolean by lazy {
         try {
-            val proc = ProcessBuilder(SH, "-c", "su -M -c id 2>&1").start()
+            val proc = ProcessBuilder(SH, "-c", "$SU -M -c id 2>&1").start()
             val out = proc.inputStream.bufferedReader().readText()
             val exit = proc.waitFor()
             val supported = exit == 0 && out.contains("uid=0")
@@ -34,8 +37,8 @@ object RootShell {
         val startTime = System.currentTimeMillis()
         DualWifiLogger.d(TAG, "CMD >>> $cmd")
 
-        // Build the su invocation - prefer mount-master for vendor socket access
-        val suCmd = if (mountMasterFlag) "su -M -c" else "su -c"
+        // Build the su invocation using the absolute path
+        val suCmd = if (mountMasterFlag) "$SU -M -c" else "$SU -c"
 
         // Wrap with sh so PATH resolution works inside the app sandbox
         val shellArgs = listOf(SH, "-c", "$suCmd '${cmd.replace("'", "'\\''")}'")

@@ -123,17 +123,14 @@ class MainActivity : AppCompatActivity() {
 
         // Update wlan0 Card
         binding.tvWlan0Status.text = if (w0.isUp) "ACTIVE" else "OFFLINE"
-        binding.tvWlan0Status.setTextColor(if (w0.isUp) Color.parseColor("#00E5FF") else Color.GRAY)
         binding.tvWlan0Details.text = "SSID: ${w0.ssid ?: "Unknown"}\nIP: ${w0.ip ?: "-"}\nBand: ${if (w0.freq > 4000) "5 GHz" else "2.4 GHz"} (${w0.freq} MHz)"
 
         // Update wlan1 Card
         binding.tvWlan1Status.text = if (w1.isUp && w1.ip != null) "CONNECTED" else if (w1.isUp) "SPAWNED" else "OFFLINE"
-        binding.tvWlan1Status.setTextColor(if (w1.ip != null) Color.parseColor("#00E676") else if (w1.isUp) Color.YELLOW else Color.GRAY)
         binding.tvWlan1Details.text = "SSID: ${w1.ssid ?: "-"}\nIP: ${w1.ip ?: "-"}\nBand: ${if (w1.freq > 4000) "5 GHz" else if (w1.freq > 0) "2.4 GHz" else "-"} (${w1.freq} MHz)"
 
         // Update SLA Card
         binding.tvSlaStatus.text = if (sla.isEnabled) "ACTIVE (BONDING)" else "STANDBY"
-        binding.tvSlaStatus.setTextColor(if (sla.isEnabled) Color.parseColor("#00E676") else Color.GRAY)
         binding.tvSlaDetails.text = "Kernel Node: /proc/sla/config (${if (sla.isEnabled) "enable=1" else "idle"})\nDaemon: ${if (sla.daemonRunning) "slad-v2 (Running)" else "Stopped"}\nwlan0 Routed: ${formatBytes(sla.bytesWlan0)} | wlan1 Routed: ${formatBytes(sla.bytesWlan1)}"
     }
 

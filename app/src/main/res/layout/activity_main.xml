@@ -3,14 +3,14 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/rog_black"
+    android:background="?android:attr/colorBackground"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="16dp">
+        android:padding="20dp">
 
         <!-- Header -->
         <LinearLayout
@@ -18,178 +18,211 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="20dp">
 
             <ImageView
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@drawable/ic_wifi_dual" />
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:src="@drawable/ic_wifi_dual"
+                app:tint="?attr/colorPrimary" />
 
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="12dp"
+                android:layout_marginStart="14dp"
                 android:orientation="vertical">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="ROG DUAL WI-FI"
-                    android:textColor="@color/rog_red"
-                    android:textSize="20sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05" />
+                    android:text="Dual Wi-Fi"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="22sp"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Multi-STA &amp; Qualcomm SLA Bonding"
-                    android:textColor="@color/rog_text_secondary"
-                    android:textSize="12sp" />
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="13sp" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/tvDeviceTag"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="#2A1015"
-                android:textColor="@color/rog_red"
-                android:textSize="10sp"
-                android:paddingHorizontal="8dp"
-                android:paddingVertical="4dp"
-                android:text="ASUS I005"
+                android:background="@drawable/bg_pill_cyan"
+                android:textColor="?attr/colorPrimary"
+                android:textSize="11sp"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="5dp"
+                android:text="ROG 5"
                 android:textStyle="bold" />
         </LinearLayout>
 
         <!-- Primary Wi-Fi Card (wlan0) -->
-        <LinearLayout
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_rog_card"
-            android:orientation="vertical"
-            android:padding="16dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorOutlineVariant"
             android:layout_marginBottom="12dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Primary Wi-Fi (wlan0)"
+                        android:textColor="?attr/colorPrimary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvWlan0Status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Checking..."
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:id="@+id/tvWlan0Details"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/title_primary_wifi"
-                    android:textColor="@color/rog_cyan"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvWlan0Status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Checking..."
-                    android:textColor="@color/rog_text_secondary"
-                    android:textSize="12sp" />
+                    android:layout_marginTop="8dp"
+                    android:text="SSID: Scanning...\nIP: -\nBand: -"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="13sp"
+                    android:lineSpacingExtra="3dp" />
             </LinearLayout>
-
-            <TextView
-                android:id="@+id/tvWlan0Details"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="SSID: Scanning...\nIP: -\nBand: -"
-                android:textColor="@color/rog_text_primary"
-                android:textSize="13sp"
-                android:lineSpacingExtra="3dp" />
-        </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <!-- Secondary Wi-Fi Card (wlan1) -->
-        <LinearLayout
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_rog_card"
-            android:orientation="vertical"
-            android:padding="16dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorOutlineVariant"
             android:layout_marginBottom="12dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Secondary Wi-Fi (wlan1)"
+                        android:textColor="?attr/colorTertiary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvWlan1Status"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Offline"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:id="@+id/tvWlan1Details"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/title_secondary_wifi"
-                    android:textColor="@color/rog_red"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvWlan1Status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Offline"
-                    android:textColor="@color/rog_text_secondary"
-                    android:textSize="12sp" />
+                    android:layout_marginTop="8dp"
+                    android:text="Interface: Offline\nIP: -\nBand: -"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="13sp"
+                    android:lineSpacingExtra="3dp" />
             </LinearLayout>
-
-            <TextView
-                android:id="@+id/tvWlan1Details"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Interface: Offline\nIP: -\nBand: -"
-                android:textColor="@color/rog_text_primary"
-                android:textSize="13sp"
-                android:lineSpacingExtra="3dp" />
-        </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <!-- SLA Kernel Bonding Card -->
-        <LinearLayout
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_rog_card"
-            android:orientation="vertical"
-            android:padding="16dp"
-            android:layout_marginBottom="16dp">
+            app:cardBackgroundColor="?attr/colorSurfaceContainer"
+            app:cardCornerRadius="18dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorOutlineVariant"
+            android:layout_marginBottom="20dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Qualcomm SLA / SLS Bonding"
+                        android:textColor="?attr/colorSecondary"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvSlaStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Standby"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:id="@+id/tvSlaDetails"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/title_sla_gaming"
-                    android:textColor="@color/rog_green"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/tvSlaStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Standby"
-                    android:textColor="@color/rog_text_secondary"
-                    android:textSize="12sp" />
+                    android:layout_marginTop="8dp"
+                    android:text="Kernel Node: /proc/sla/config\nDaemon: slad-v2\nStatus: Waiting for wlan1"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="12sp"
+                    android:lineSpacingExtra="2dp" />
             </LinearLayout>
-
-            <TextView
-                android:id="@+id/tvSlaDetails"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Kernel Node: /proc/sla/config\nDaemon: slad-v2\nStatus: Waiting for wlan1"
-                android:textColor="@color/rog_text_primary"
-                android:textSize="12sp"
-                android:lineSpacingExtra="2dp" />
-        </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
 
         <!-- Secondary Network Config & Controls -->
         <LinearLayout
@@ -204,29 +237,24 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="CONNECT SECONDARY NETWORK"
-                android:textColor="@color/rog_text_secondary"
-                android:textSize="11sp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="12sp"
                 android:textStyle="bold"
                 android:letterSpacing="0.05" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnScan"
-                style="@style/Widget.MaterialComponents.Button.TextButton"
+                style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="wrap_content"
-                android:layout_height="36dp"
+                android:layout_height="38dp"
                 android:text="Scan Networks"
-                android:textColor="@color/rog_cyan"
-                android:textSize="11sp"
-                android:padding="0dp" />
+                android:textSize="12sp" />
         </LinearLayout>
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColorHint="@color/rog_text_secondary"
-            app:boxBackgroundColor="@color/rog_card_bg"
-            app:boxStrokeColor="@color/rog_cyan"
-            app:hintTextColor="@color/rog_cyan"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             android:layout_marginBottom="8dp">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -234,19 +262,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="@string/hint_ssid"
-                android:textColor="@color/rog_text_primary"
                 android:singleLine="true" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <com.google.android.material.textfield.TextInputLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColorHint="@color/rog_text_secondary"
-            app:boxBackgroundColor="@color/rog_card_bg"
-            app:boxStrokeColor="@color/rog_cyan"
-            app:hintTextColor="@color/rog_cyan"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
             app:passwordToggleEnabled="true"
-            app:passwordToggleTint="@color/rog_text_secondary"
             android:layout_marginBottom="16dp">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -255,54 +278,58 @@
                 android:layout_height="wrap_content"
                 android:hint="@string/hint_password"
                 android:inputType="textPassword"
-                android:textColor="@color/rog_text_primary"
                 android:singleLine="true" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Action Buttons -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnConnectDual"
+            style="@style/Widget.Material3.Button"
             android:layout_width="match_parent"
             android:layout_height="52dp"
             android:text="@string/btn_connect_dual"
-            android:textColor="@color/rog_text_primary"
-            app:backgroundTint="@color/rog_red"
-            app:cornerRadius="10dp"
             android:textStyle="bold"
-            android:layout_marginBottom="8dp" />
+            app:cornerRadius="14dp"
+            android:layout_marginBottom="10dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSpawnWlan1"
+            style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="48dp"
             android:text="@string/btn_spawn_wlan1"
-            android:textColor="@color/rog_cyan"
-            app:backgroundTint="#142630"
-            app:strokeColor="@color/rog_cyan"
-            app:strokeWidth="1dp"
-            app:cornerRadius="10dp"
-            android:layout_marginBottom="8dp" />
+            app:cornerRadius="14dp"
+            android:layout_marginBottom="10dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnDisconnect"
+            style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="44dp"
             android:text="@string/btn_disconnect_dual"
-            android:textColor="@color/rog_text_secondary"
-            app:backgroundTint="#1A1A22"
-            app:cornerRadius="10dp"
+            android:textColor="?attr/colorError"
             android:layout_marginBottom="16dp" />
 
         <!-- Log Output Box -->
-        <TextView
-            android:id="@+id/tvLog"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#08080C"
-            android:padding="12dp"
-            android:textColor="#808090"
-            android:textSize="11sp"
-            android:fontFamily="monospace"
-            android:text="Ready. Root access required for SLA routing.\n" />
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLowest"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="?attr/colorOutlineVariant">
+
+            <TextView
+                android:id="@+id/tvLog"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="12dp"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:text="Ready. Root access required for SLA routing.\n" />
+        </com.google.android.material.card.MaterialCardView>
+
     </LinearLayout>
 </ScrollView>

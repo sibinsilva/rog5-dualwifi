@@ -4,6 +4,7 @@ import android.graphics.Color
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -35,6 +36,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        binding.btnScan.setOnClickListener {
+            lifecycleScope.launch {
+                binding.btnScan.isEnabled = false
+                binding.btnScan.text = "Scanning..."
+                log("Scanning nearby Wi-Fi networks...")
+
+                val networks = wifiManager.scanNetworks()
+                binding.btnScan.isEnabled = true
+                binding.btnScan.text = "Scan Networks"
+
+                if (networks.isEmpty()) {
+                    log("No networks found or scan permission missing.")
+                    return@launch
+                }
+
+                log("Found ${networks.size} networks. Showing list...")
+                val items = networks.map { net ->
+                    val bandBadge = if (net.is5GHz) "⚡ 5 GHz" else "2.4 GHz"
+                    "${net.ssid}\n  [$bandBadge]  Signal: ${net.level} dBm"
+                }.toTypedArray()
+
+                MaterialAlertDialogBuilder(this@MainActivity)
+                    .setTitle("Select Secondary Network")
+                    .setItems(items) { _, which ->
+                        val selected = networks[which]
+                        binding.etSsid.setText(selected.ssid)
+                        log("Selected: ${selected.ssid} (${selected.bandLabel})")
+                        binding.etPassword.requestFocus()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+
         binding.btnSpawnWlan1.setOnClickListener {
             lifecycleScope.launch {
                 binding.btnSpawnWlan1.isEnabled = false

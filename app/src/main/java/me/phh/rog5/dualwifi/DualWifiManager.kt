@@ -21,6 +21,45 @@ class DualWifiManager {
         val bytesWlan1: Long = 0
     )
 
+    data class ScannedNetwork(
+        val ssid: String,
+        val bssid: String,
+        val freq: Int,
+        val level: Int,
+        val flags: String
+    ) {
+        val is5GHz: Boolean get() = freq > 4000
+        val bandLabel: String get() = if (is5GHz) "5 GHz" else "2.4 GHz"
+    }
+
+    suspend fun scanNetworks(): List<ScannedNetwork> = withContext(Dispatchers.IO) {
+        val socketPath = "/data/vendor/wifi/wpa/sockets"
+        // Trigger a fresh background scan
+        RootShell.run("wpa_cli -p $socketPath -i wlan0 scan")
+        kotlinx.coroutines.delay(1200)
+
+        val res = RootShell.run("wpa_cli -p $socketPath -i wlan0 scan_results")
+        val networks = mutableListOf<ScannedNetwork>()
+        if (res.isSuccess) {
+            for (line in res.output.lines()) {
+                val parts = line.split("\t")
+                if (parts.size >= 5) {
+                    val bssid = parts[0].trim()
+                    val freq = parts[1].trim().toIntOrNull() ?: 0
+                    val level = parts[2].trim().toIntOrNull() ?: 0
+                    val flags = parts[3].trim()
+                    val ssid = parts[4].trim()
+                    if (ssid.isNotEmpty()) {
+                        networks.add(ScannedNetwork(ssid, bssid, freq, level, flags))
+                    }
+                }
+            }
+        }
+        // Deduplicate by SSID, prioritize 5GHz and strongest signal
+        networks.distinctBy { "${it.ssid}_${it.is5GHz}" }
+            .sortedWith(compareByDescending<ScannedNetwork> { it.is5GHz }.thenByDescending { it.level })
+    }
+
     suspend fun getInterfaceStatus(iface: String): InterfaceInfo = withContext(Dispatchers.IO) {
         val linkRes = RootShell.run("ip -br link show $iface")
         val isUp = linkRes.output.contains("UP")

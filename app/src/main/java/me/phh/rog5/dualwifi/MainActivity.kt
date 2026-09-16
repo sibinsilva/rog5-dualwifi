@@ -1,9 +1,12 @@
 package me.phh.rog5.dualwifi
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
 import android.view.View
 import android.widget.EditText
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -15,6 +18,10 @@ import me.phh.rog5.dualwifi.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        private const val TAG = "DualWifi_UI"
+    }
+
     private lateinit var binding: ActivityMainBinding
     private val wifiManager = DualWifiManager()
     private var pollJob: Job? = null
@@ -23,20 +30,25 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        DualWifiLogger.i(TAG, "MainActivity onCreate: Initializing Dual Wi-Fi UI")
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         setupUI()
         setupListeners()
+        observeLogs()
+        checkRootAccess()
     }
 
     override fun onResume() {
         super.onResume()
+        DualWifiLogger.d(TAG, "MainActivity onResume: Resuming telemetry polling")
         startStatusPolling()
     }
 
     override fun onPause() {
         super.onPause()
+        DualWifiLogger.d(TAG, "MainActivity onPause: Pausing telemetry polling")
         pollJob?.cancel()
     }
 
@@ -45,12 +57,44 @@ class MainActivity : AppCompatActivity() {
         if (savedSsid != null) {
             binding.tvSecondarySsid.text = savedSsid
             binding.btnSelectNetwork.text = "Change Network ($savedSsid)"
+            DualWifiLogger.d(TAG, "Restored saved secondary network: $savedSsid")
+        }
+    }
+
+    private fun checkRootAccess() {
+        lifecycleScope.launch {
+            val rootOk = RootShell.isRootAvailable()
+            if (!rootOk) {
+                DualWifiLogger.e(TAG, "Superuser access not available! Commands may fail.")
+                Toast.makeText(
+                    this@MainActivity,
+                    "Warning: Superuser permission not detected. Please verify KernelSU / Magisk grant.",
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                DualWifiLogger.i(TAG, "Superuser access verified and active.")
+            }
+        }
+    }
+
+    private fun observeLogs() {
+        lifecycleScope.launch {
+            DualWifiLogger.logsFlow.collect { entries ->
+                if (entries.isNotEmpty()) {
+                    val logText = entries.takeLast(40).joinToString("\n") { it.formatted() }
+                    binding.tvLog.text = logText
+                    binding.scrollLogs.post {
+                        binding.scrollLogs.fullScroll(View.FOCUS_DOWN)
+                    }
+                }
+            }
         }
     }
 
     private fun setupListeners() {
         // Master Switch Toggle
         binding.switchDualWifi.setOnCheckedChangeListener { _, isChecked ->
+            DualWifiLogger.i(TAG, "Master toggle switched: isChecked=$isChecked")
             if (isChecked) {
                 val savedSsid = prefs.getString("saved_ssid", null)
                 val savedPass = prefs.getString("saved_pass", "") ?: ""
@@ -66,6 +110,7 @@ class MainActivity : AppCompatActivity() {
 
         // Scan & Select Secondary Network
         binding.btnSelectNetwork.setOnClickListener {
+            DualWifiLogger.i(TAG, "User clicked Scan & Select Secondary Network")
             showNetworkPicker()
         }
 
@@ -73,14 +118,14 @@ class MainActivity : AppCompatActivity() {
         binding.rbModeGaming.setOnClickListener {
             binding.rbModeGaming.isChecked = true
             binding.rbModeSpeed.isChecked = false
-            log("Acceleration mode set to Gaming Low-Latency (SLS)")
+            DualWifiLogger.i(TAG, "Acceleration mode set to Gaming Low-Latency (SLS)")
         }
         binding.layoutModeGaming.setOnClickListener { binding.rbModeGaming.performClick() }
 
         binding.rbModeSpeed.setOnClickListener {
             binding.rbModeSpeed.isChecked = true
             binding.rbModeGaming.isChecked = false
-            log("Acceleration mode set to Download Booster (SLA)")
+            DualWifiLogger.i(TAG, "Acceleration mode set to Download Booster (SLA)")
         }
         binding.layoutModeSpeed.setOnClickListener { binding.rbModeSpeed.performClick() }
 
@@ -89,6 +134,50 @@ class MainActivity : AppCompatActivity() {
             val isVisible = binding.layoutDebugContent.visibility == View.VISIBLE
             binding.layoutDebugContent.visibility = if (isVisible) View.GONE else View.VISIBLE
             binding.tvToggleArrow.text = if (isVisible) "▼ Show" else "▲ Hide"
+            DualWifiLogger.d(TAG, "Diagnostics drawer toggled: visible=${!isVisible}")
+        }
+
+        // Run Self-Test Button
+        binding.btnRunSelfTest.setOnClickListener {
+            runSelfTestDiagnostics()
+        }
+
+        // Copy Logs Button
+        binding.btnCopyLogs.setOnClickListener {
+            val logs = DualWifiLogger.getAllLogs()
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("DualWifi Logs", logs))
+            Toast.makeText(this, "Diagnostics logs copied to clipboard (${logs.lines().size} lines)", Toast.LENGTH_SHORT).show()
+            DualWifiLogger.d(TAG, "Logs copied to clipboard by user")
+        }
+
+        // Clear Logs Button
+        binding.btnClearLogs.setOnClickListener {
+            DualWifiLogger.clear()
+            binding.tvLog.text = "Logs cleared.\n"
+        }
+    }
+
+    private fun runSelfTestDiagnostics() {
+        lifecycleScope.launch {
+            binding.btnRunSelfTest.isEnabled = false
+            binding.btnRunSelfTest.text = "Testing..."
+            DualWifiLogger.i(TAG, "User triggered system self-test...")
+
+            val report = wifiManager.runSelfTest()
+            binding.btnRunSelfTest.isEnabled = true
+            binding.btnRunSelfTest.text = "Run Self-Test"
+
+            MaterialAlertDialogBuilder(this@MainActivity)
+                .setTitle("Dual Wi-Fi Self-Test")
+                .setMessage(report)
+                .setPositiveButton("OK", null)
+                .setNeutralButton("Copy Report") { _, _ ->
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("DualWifi Report", report))
+                    Toast.makeText(this@MainActivity, "Report copied to clipboard", Toast.LENGTH_SHORT).show()
+                }
+                .show()
         }
     }
 
@@ -96,7 +185,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             binding.btnSelectNetwork.isEnabled = false
             binding.btnSelectNetwork.text = "Scanning nearby networks..."
-            log("Scanning for nearby 5 GHz and 2.4 GHz access points...")
+            DualWifiLogger.i(TAG, "Scanning for 5 GHz and 2.4 GHz access points...")
 
             val networks = wifiManager.scanNetworks()
             binding.btnSelectNetwork.isEnabled = true
@@ -104,26 +193,35 @@ class MainActivity : AppCompatActivity() {
             binding.btnSelectNetwork.text = if (savedSsid != null) "Change Network ($savedSsid)" else "Scan & Select Secondary Network"
 
             if (networks.isEmpty()) {
+                DualWifiLogger.w(TAG, "Scan returned 0 networks")
                 MaterialAlertDialogBuilder(this@MainActivity)
                     .setTitle("No Networks Found")
-                    .setMessage("Make sure Wi-Fi is enabled and location permission is granted.")
+                    .setMessage("No Wi-Fi networks were discovered.\n\nPlease ensure Wi-Fi is enabled in Android Settings and check the Diagnostics log drawer for details.")
                     .setPositiveButton("OK", null)
+                    .setNeutralButton("View Logs") { _, _ ->
+                        binding.layoutDebugContent.visibility = View.VISIBLE
+                        binding.tvToggleArrow.text = "▲ Hide"
+                    }
                     .show()
                 return@launch
             }
 
+            DualWifiLogger.i(TAG, "Presenting ${networks.size} networks to user")
             val items = networks.map { net ->
                 val badge = if (net.is5GHz) "⚡ 5 GHz DBS" else "2.4 GHz"
                 "${net.ssid}\n[$badge] • Signal: ${net.level} dBm"
             }.toTypedArray()
 
             MaterialAlertDialogBuilder(this@MainActivity)
-                .setTitle("Select Secondary Wi-Fi")
+                .setTitle("Select Secondary Wi-Fi (${networks.size} found)")
                 .setItems(items) { _, which ->
                     val selected = networks[which]
+                    DualWifiLogger.i(TAG, "User selected network: '${selected.ssid}' (${selected.bandLabel}, ${selected.freq} MHz)")
                     promptPasswordAndConnect(selected.ssid)
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton("Cancel") { _, _ ->
+                    DualWifiLogger.d(TAG, "Network selection canceled by user")
+                }
                 .show()
         }
     }
@@ -155,20 +253,22 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             binding.tvSecondarySub.text = "Connecting to $ssid..."
             binding.tvSecondaryBadge.text = "Connecting..."
-            log("Activating dual Wi-Fi with $ssid...")
+            DualWifiLogger.i(TAG, "Activating dual Wi-Fi with $ssid...")
 
             // Auto spawn if needed
-            wifiManager.spawnWlan1 { log(it) }
+            wifiManager.spawnWlan1 { DualWifiLogger.i(TAG, it) }
 
-            val success = wifiManager.connectSecondary(ssid, pass) { log(it) }
+            val success = wifiManager.connectSecondary(ssid, pass) { DualWifiLogger.i(TAG, it) }
             if (success) {
                 binding.tvSecondarySub.text = "Connected & Accelerated"
                 binding.tvSecondaryBadge.text = "⚡ Accelerated"
                 binding.switchDualWifi.isChecked = true
+                DualWifiLogger.i(TAG, "Dual Wi-Fi successfully engaged with $ssid")
             } else {
                 binding.tvSecondarySub.text = "Connection failed - tap to retry"
                 binding.tvSecondaryBadge.text = "Failed"
                 binding.switchDualWifi.isChecked = false
+                DualWifiLogger.e(TAG, "Dual Wi-Fi connection failed to $ssid")
             }
             refreshStatus()
         }
@@ -178,7 +278,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             binding.tvSecondarySub.text = "Disconnected"
             binding.tvSecondaryBadge.text = "Offline"
-            wifiManager.disconnectSecondary { log(it) }
+            wifiManager.disconnectSecondary { DualWifiLogger.i(TAG, it) }
             refreshStatus()
         }
     }
@@ -227,11 +327,5 @@ class MainActivity : AppCompatActivity() {
             bytes >= 1_000 -> "%.0f KB".format(bytes / 1_000.0)
             else -> "$bytes B"
         }
-    }
-
-    private fun log(msg: String) {
-        val current = binding.tvLog.text.toString()
-        val lines = current.lines().takeLast(6).joinToString("\n")
-        binding.tvLog.text = "$lines\n> $msg"
     }
 }

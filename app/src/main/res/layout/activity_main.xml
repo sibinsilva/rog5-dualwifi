@@ -458,18 +458,67 @@
                             android:textSize="11sp"
                             android:fontFamily="monospace"
                             android:text="Kernel Node: /proc/sla/config\nDaemon: slad-v2\nwlan0 Bytes: 0 | wlan1 Bytes: 0"
-                            android:layout_marginBottom="8dp" />
+                            android:layout_marginBottom="10dp" />
 
-                        <TextView
-                            android:id="@+id/tvLog"
+                        <!-- Diagnostic Action Buttons -->
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:background="#05050A"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="10dp">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnRunSelfTest"
+                                style="@style/Widget.Material3.Button.TonalButton"
+                                android:layout_width="0dp"
+                                android:layout_height="40dp"
+                                android:layout_weight="1"
+                                android:text="Run Self-Test"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:paddingHorizontal="8dp"
+                                app:cornerRadius="10dp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnCopyLogs"
+                                style="@style/Widget.Material3.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="40dp"
+                                android:layout_marginStart="8dp"
+                                android:text="Copy"
+                                android:textSize="11sp"
+                                android:paddingHorizontal="12dp"
+                                app:cornerRadius="10dp" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btnClearLogs"
+                                style="@style/Widget.Material3.Button.TextButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="40dp"
+                                android:layout_marginStart="4dp"
+                                android:text="Clear"
+                                android:textSize="11sp"
+                                android:paddingHorizontal="8dp" />
+                        </LinearLayout>
+
+                        <!-- Scrollable Log Console -->
+                        <androidx.core.widget.NestedScrollView
+                            android:id="@+id/scrollLogs"
+                            android:layout_width="match_parent"
+                            android:layout_height="220dp"
+                            android:background="#0A0A10"
                             android:padding="10dp"
-                            android:textColor="#707080"
-                            android:textSize="10sp"
-                            android:fontFamily="monospace"
-                            android:text="Ready.\n" />
+                            android:fillViewport="true">
+
+                            <TextView
+                                android:id="@+id/tvLog"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:textColor="#A0A0B8"
+                                android:textSize="10sp"
+                                android:fontFamily="monospace"
+                                android:text="Initializing Dual Wi-Fi Subsystem...\n" />
+                        </androidx.core.widget.NestedScrollView>
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>

@@ -98,7 +98,7 @@ class MainActivity : AppCompatActivity() {
             DualWifiLogger.i(TAG, "Master toggle switched: isChecked=$isChecked")
             if (isChecked) {
                 val savedSsid = prefs.getString("saved_ssid", null)
-                val savedPass = prefs.getString("saved_pass", "") ?: ""
+                val savedPass = if (savedSsid != null) wifiManager.getSavedPassword(savedSsid) ?: prefs.getString("saved_pass", "") ?: "" else ""
                 if (savedSsid.isNullOrEmpty()) {
                     showNetworkPicker()
                 } else {
@@ -113,6 +113,11 @@ class MainActivity : AppCompatActivity() {
         binding.btnSelectNetwork.setOnClickListener {
             DualWifiLogger.i(TAG, "User clicked Scan & Select Secondary Network")
             showNetworkPicker()
+        }
+
+        binding.btnSelectNetwork.setOnLongClickListener {
+            showForgetNetworkDialog()
+            true
         }
 
         // Mode Toggles
@@ -134,7 +139,7 @@ class MainActivity : AppCompatActivity() {
         binding.layoutToggleDebug.setOnClickListener {
             val isVisible = binding.layoutDebugContent.visibility == View.VISIBLE
             binding.layoutDebugContent.visibility = if (isVisible) View.GONE else View.VISIBLE
-            binding.tvToggleArrow.text = if (isVisible) "▼ Show" else "▲ Hide"
+            binding.tvToggleArrow.text = if (isVisible) "Show" else "Hide"
             DualWifiLogger.d(TAG, "Diagnostics drawer toggled: visible=${!isVisible}")
         }
 
@@ -190,8 +195,8 @@ class MainActivity : AppCompatActivity() {
 
             val networks = wifiManager.scanNetworks()
             binding.btnSelectNetwork.isEnabled = true
-            val savedSsid = prefs.getString("saved_ssid", null)
-            binding.btnSelectNetwork.text = if (savedSsid != null) "Change Network ($savedSsid)" else "Scan & Select Secondary Network"
+            val currentSsid = prefs.getString("saved_ssid", null)
+            binding.btnSelectNetwork.text = if (currentSsid != null) "Change Network ($currentSsid)" else "Scan & Select Secondary Network"
 
             if (networks.isEmpty()) {
                 DualWifiLogger.w(TAG, "Scan returned 0 networks")
@@ -201,7 +206,7 @@ class MainActivity : AppCompatActivity() {
                     .setPositiveButton("OK", null)
                     .setNeutralButton("View Logs") { _, _ ->
                         binding.layoutDebugContent.visibility = View.VISIBLE
-                        binding.tvToggleArrow.text = "▲ Hide"
+                        binding.tvToggleArrow.text = "Hide"
                     }
                     .show()
                 return@launch
@@ -209,22 +214,64 @@ class MainActivity : AppCompatActivity() {
 
             DualWifiLogger.i(TAG, "Presenting ${networks.size} networks to user")
             val items = networks.map { net ->
-                val badge = if (net.is5GHz) "⚡ 5 GHz DBS" else "2.4 GHz"
-                "${net.ssid}\n[$badge] • Signal: ${net.level} dBm"
+                val badge = if (net.is5GHz) "5 GHz DBS" else "2.4 GHz"
+                val savedBadge = if (wifiManager.isNetworkSaved(net.ssid)) " • Saved" else if (net.isOpen) " • Open" else ""
+                "${net.ssid}\n[$badge]$savedBadge • Signal: ${net.level} dBm"
             }.toTypedArray()
 
             MaterialAlertDialogBuilder(this@MainActivity)
                 .setTitle("Select Secondary Wi-Fi (${networks.size} found)")
                 .setItems(items) { _, which ->
                     val selected = networks[which]
-                    DualWifiLogger.i(TAG, "User selected network: '${selected.ssid}' (${selected.bandLabel}, ${selected.freq} MHz)")
-                    promptPasswordAndConnect(selected.ssid)
+                    DualWifiLogger.i(TAG, "User selected network: '${selected.ssid}' (${selected.bandLabel}, ${selected.freq} MHz, saved=${wifiManager.isNetworkSaved(selected.ssid)})")
+
+                    if (wifiManager.isNetworkSaved(selected.ssid)) {
+                        val savedPass = wifiManager.getSavedPassword(selected.ssid) ?: ""
+                        Toast.makeText(this@MainActivity, "Connecting to ${selected.ssid} (Saved network)...", Toast.LENGTH_SHORT).show()
+                        prefs.edit().putString("saved_ssid", selected.ssid).putString("saved_pass", savedPass).apply()
+                        binding.tvSecondarySsid.text = selected.ssid
+                        binding.btnSelectNetwork.text = "Change Network (${selected.ssid})"
+                        binding.switchDualWifi.isChecked = true
+                        connectToSecondary(selected.ssid, savedPass)
+                    } else if (selected.isOpen) {
+                        Toast.makeText(this@MainActivity, "Connecting to open network ${selected.ssid}...", Toast.LENGTH_SHORT).show()
+                        wifiManager.saveNetworkCredentials(selected.ssid, "")
+                        binding.tvSecondarySsid.text = selected.ssid
+                        binding.btnSelectNetwork.text = "Change Network (${selected.ssid})"
+                        binding.switchDualWifi.isChecked = true
+                        connectToSecondary(selected.ssid, "")
+                    } else {
+                        promptPasswordAndConnect(selected.ssid)
+                    }
+                }
+                .setNeutralButton("Forget Saved...") { _, _ ->
+                    showForgetNetworkDialog()
                 }
                 .setNegativeButton("Cancel") { _, _ ->
                     DualWifiLogger.d(TAG, "Network selection canceled by user")
                 }
                 .show()
         }
+    }
+
+    private fun showForgetNetworkDialog() {
+        val savedSsid = prefs.getString("saved_ssid", null)
+        if (savedSsid == null && !wifiManager.isNetworkSaved("")) {
+            Toast.makeText(this, "No saved networks to remove", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Forget Saved Network")
+            .setMessage("Do you want to forget saved credentials for '$savedSsid'?")
+            .setPositiveButton("Forget") { _, _ ->
+                savedSsid?.let { wifiManager.forgetNetworkCredentials(it) }
+                binding.tvSecondarySsid.text = "Secondary Wi-Fi"
+                binding.btnSelectNetwork.text = "Scan & Select Secondary Network"
+                Toast.makeText(this, "Network forgotten", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun promptPasswordAndConnect(ssid: String) {
@@ -236,11 +283,11 @@ class MainActivity : AppCompatActivity() {
 
         MaterialAlertDialogBuilder(this)
             .setTitle("Connect to $ssid")
-            .setMessage("Enter the password for your secondary network:")
+            .setMessage("Enter password (network will be saved for automatic reuse):")
             .setView(input)
-            .setPositiveButton("Connect") { _, _ ->
+            .setPositiveButton("Connect & Save") { _, _ ->
                 val pass = input.text.toString()
-                prefs.edit().putString("saved_ssid", ssid).putString("saved_pass", pass).apply()
+                wifiManager.saveNetworkCredentials(ssid, pass)
                 binding.tvSecondarySsid.text = ssid
                 binding.btnSelectNetwork.text = "Change Network ($ssid)"
                 binding.switchDualWifi.isChecked = true
@@ -262,7 +309,7 @@ class MainActivity : AppCompatActivity() {
             val success = wifiManager.connectSecondary(ssid, pass) { DualWifiLogger.i(TAG, it) }
             if (success) {
                 binding.tvSecondarySub.text = "Connected & Accelerated"
-                binding.tvSecondaryBadge.text = "⚡ Accelerated"
+                binding.tvSecondaryBadge.text = "Accelerated"
                 binding.switchDualWifi.isChecked = true
                 DualWifiLogger.i(TAG, "Dual Wi-Fi successfully engaged with $ssid")
             } else {
@@ -308,7 +355,7 @@ class MainActivity : AppCompatActivity() {
         if (w1.isUp && w1.ip != null) {
             binding.tvSecondarySsid.text = w1.ssid ?: "Secondary Wi-Fi"
             binding.tvSecondarySub.text = "IP: ${w1.ip} • Accelerated"
-            binding.tvSecondaryBadge.text = "⚡ 5 GHz DBS"
+            binding.tvSecondaryBadge.text = "5 GHz DBS"
             binding.ivSecondaryIcon.setColorFilter(getColor(com.google.android.material.R.color.material_dynamic_primary40))
         } else if (w1.isUp) {
             binding.tvSecondarySub.text = "Antenna ready, connecting..."

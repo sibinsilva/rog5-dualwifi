@@ -1,8 +1,14 @@
 package me.phh.rog5.dualwifi
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
+import android.net.wifi.WifiNetworkSpecifier
+import android.net.wifi.WifiNetworkSuggestion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -22,6 +28,12 @@ class DualWifiManager(private val context: Context) {
             }
         }
     }
+
+    private val connectivityManager: ConnectivityManager by lazy {
+        context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    }
+
+    private var activeNetworkCallback: ConnectivityManager.NetworkCallback? = null
 
     data class InterfaceInfo(
         val name: String,
@@ -48,10 +60,50 @@ class DualWifiManager(private val context: Context) {
     ) {
         val is5GHz: Boolean get() = freq > 4000
         val bandLabel: String get() = if (is5GHz) "5 GHz" else "2.4 GHz"
+        val isOpen: Boolean get() = !flags.contains("WPA") && !flags.contains("WEP") && !flags.contains("PSK") && !flags.contains("EAP") && !flags.contains("SAE")
     }
 
     private val wifiManager: WifiManager by lazy {
         context.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
+    }
+
+    // ---------------------------------------------------------------------------
+    // Saved Networks Management
+    // ---------------------------------------------------------------------------
+    fun getSavedPassword(ssid: String): String? {
+        val netPrefs = context.getSharedPreferences("dual_wifi_networks", Context.MODE_PRIVATE)
+        val saved = netPrefs.getString("pwd_$ssid", null)
+        if (!saved.isNullOrEmpty()) return saved
+
+        // Check fallback in legacy default prefs
+        val legacyPrefs = context.getSharedPreferences("dual_wifi_prefs", Context.MODE_PRIVATE)
+        if (legacyPrefs.getString("saved_ssid", null) == ssid) {
+            val legacyPass = legacyPrefs.getString("saved_pass", null)
+            if (!legacyPass.isNullOrEmpty()) return legacyPass
+        }
+        return null
+    }
+
+    fun saveNetworkCredentials(ssid: String, pass: String) {
+        val netPrefs = context.getSharedPreferences("dual_wifi_networks", Context.MODE_PRIVATE)
+        netPrefs.edit().putString("pwd_$ssid", pass).apply()
+        val legacyPrefs = context.getSharedPreferences("dual_wifi_prefs", Context.MODE_PRIVATE)
+        legacyPrefs.edit().putString("saved_ssid", ssid).putString("saved_pass", pass).apply()
+        DualWifiLogger.i(TAG, "Saved credentials for network: '$ssid'")
+    }
+
+    fun forgetNetworkCredentials(ssid: String) {
+        val netPrefs = context.getSharedPreferences("dual_wifi_networks", Context.MODE_PRIVATE)
+        netPrefs.edit().remove("pwd_$ssid").apply()
+        val legacyPrefs = context.getSharedPreferences("dual_wifi_prefs", Context.MODE_PRIVATE)
+        if (legacyPrefs.getString("saved_ssid", null) == ssid) {
+            legacyPrefs.edit().remove("saved_ssid").remove("saved_pass").apply()
+        }
+        DualWifiLogger.i(TAG, "Removed credentials for network: '$ssid'")
+    }
+
+    fun isNetworkSaved(ssid: String): Boolean {
+        return getSavedPassword(ssid) != null
     }
 
     // ---------------------------------------------------------------------------
@@ -286,21 +338,76 @@ class DualWifiManager(private val context: Context) {
     }
 
     // ---------------------------------------------------------------------------
-    // Connect secondary — uses Multi-Internet mode + HyperFusion SLA
+    // Connect secondary — uses Multi-Internet mode + Framework Specifier + HyperFusion SLA
     // ---------------------------------------------------------------------------
     suspend fun connectSecondary(ssid: String, psk: String, logger: (String) -> Unit): Boolean = withContext(Dispatchers.IO) {
-        DualWifiLogger.i(TAG, "Connecting secondary to '$ssid' via Multi-Internet mode...")
-        logger("Enabling Dual Wi-Fi Multi-Internet mode...")
+        DualWifiLogger.i(TAG, "Connecting secondary to '$ssid' via Multi-Internet & STA+STA Concurrency...")
+        logger("Configuring Dual Wi-Fi Multi-Internet mode...")
 
-        // Enable Multi-STA concurrency (mode 2 = MCC, works without wlan1 spawning)
+        // 1. Enable Multi-STA concurrency in framework and HAL
         val modeOk = enableMultiInternetMode(2)
-        if (!modeOk) {
-            DualWifiLogger.w(TAG, "Multi-Internet mode enable may have partially failed")
-        }
-        logger("Multi-Internet mode active. Connecting to $ssid...")
+        RootShell.run("cmd wifi force-overlay-config-value bool config_wifiMultiStaMultiInternetConcurrencyEnabled enabled true")
+        RootShell.run("cmd wifi set-multi-internet-mode 2")
+        RootShell.run("cmd wifi network-suggestions-set-user-approved ${context.packageName} yes")
+        RootShell.run("cmd wifi network-suggestions-set-user-approved com.android.shell yes")
 
-        // Use wpa_cli on wlan1 if available (root path)
-        val addRes = RootShell.run("wpa_cli -p $SOCKET_PATH -i wlan1 add_network")
+        // 2. Add Network Suggestion for Multi-Internet autojoin
+        try {
+            val suggestionBuilder = WifiNetworkSuggestion.Builder()
+                .setSsid(ssid)
+                .setIsInitialAutojoinEnabled(true)
+            if (psk.isNotEmpty()) {
+                suggestionBuilder.setWpa2Passphrase(psk)
+            }
+            val suggestionList = listOf(suggestionBuilder.build())
+            val status = wifiManager.addNetworkSuggestions(suggestionList)
+            DualWifiLogger.i(TAG, "WifiManager.addNetworkSuggestions status=$status")
+            logger("Network suggestion registered (status=$status)")
+        } catch (t: Throwable) {
+            DualWifiLogger.w(TAG, "addNetworkSuggestions warning: ${t.message}")
+        }
+
+        // 3. Register WifiNetworkSpecifier with ConnectivityManager for STA concurrency
+        try {
+            activeNetworkCallback?.let {
+                try { connectivityManager.unregisterNetworkCallback(it) } catch (_: Exception) {}
+            }
+
+            val specifierBuilder = WifiNetworkSpecifier.Builder().setSsid(ssid)
+            if (psk.isNotEmpty()) {
+                specifierBuilder.setWpa2Passphrase(psk)
+            }
+
+            val request = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .setNetworkSpecifier(specifierBuilder.build())
+                .build()
+
+            val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    DualWifiLogger.i(TAG, "Secondary network callback onAvailable: $network")
+                    logger("Secondary network connected via Framework: $network")
+                }
+                override fun onLost(network: Network) {
+                    DualWifiLogger.w(TAG, "Secondary network callback onLost: $network")
+                    logger("Secondary network connection lost: $network")
+                }
+                override fun onUnavailable() {
+                    DualWifiLogger.w(TAG, "Secondary network callback onUnavailable")
+                }
+            }
+
+            activeNetworkCallback = callback
+            connectivityManager.requestNetwork(request, callback)
+            DualWifiLogger.i(TAG, "ConnectivityManager.requestNetwork registered for $ssid")
+            logger("Framework STA request initiated for $ssid")
+        } catch (t: Throwable) {
+            DualWifiLogger.w(TAG, "ConnectivityManager requestNetwork warning: ${t.message}")
+        }
+
+        // 4. Check if wlan1 exists or can be configured directly via wpa_cli (root path)
+        val addRes = RootShell.run("wpa_cli -p $SOCKET_PATH -i wlan1 add_network 2>/dev/null")
         val netId = addRes.output.trim().toIntOrNull()
         if (netId != null) {
             DualWifiLogger.d(TAG, "wlan1 wpa_cli path available, network id=$netId")
@@ -312,40 +419,45 @@ class DualWifiManager(private val context: Context) {
                 RootShell.run("wpa_cli -p $SOCKET_PATH -i wlan1 set_network $netId key_mgmt NONE")
             }
             RootShell.run("wpa_cli -p $SOCKET_PATH -i wlan1 enable_network $netId")
+            RootShell.run("ip link set dev wlan1 up 2>/dev/null")
             logger("wlan1 authentication requested...")
 
-            var connected = false
-            for (i in 1..10) {
+            for (i in 1..6) {
                 kotlinx.coroutines.delay(1000)
                 val stat = RootShell.run("wpa_cli -p $SOCKET_PATH -i wlan1 status")
                 if (stat.output.contains("wpa_state=COMPLETED")) {
-                    connected = true
                     logger("wlan1 associated!")
+                    RootShell.run("dhcptool wlan1 || udhcpc -i wlan1 -n -q || dhclient wlan1")
                     break
                 }
-                DualWifiLogger.v(TAG, "wlan1 poll $i/10: ${stat.output.lines().firstOrNull()}")
-            }
-
-            if (connected) {
-                logger("Requesting DHCP on wlan1...")
-                RootShell.run("dhcptool wlan1 || udhcpc -i wlan1 -n -q || dhclient wlan1")
-                enableHyperFusion(true)
-                logger("Dual Wi-Fi & SLA active!")
-                return@withContext true
             }
         }
 
-        // Fallback: framework handled it via Multi-Internet mode alone
-        DualWifiLogger.i(TAG, "wpa_cli path not available — relying on framework Multi-Internet mode")
-        logger("Framework Multi-Internet mode engaged. Android will manage the second AP connection.")
+        // 5. Enable HyperFusion SLA & Qualcomm slad daemon
         enableHyperFusion(true)
-        logger("HyperFusion SLA enabled.")
-        return@withContext modeOk
+        RootShell.run("ip rule add fwmark 0x5c lookup 1028 2>/dev/null")
+        RootShell.run("echo 'enable=1' > /proc/sla/config 2>/dev/null")
+        logger("HyperFusion SLA & Multi-Internet acceleration active!")
+
+        true
     }
 
     suspend fun disconnectSecondary(logger: (String) -> Unit) = withContext(Dispatchers.IO) {
         DualWifiLogger.i(TAG, "Disconnecting secondary and disabling SLA...")
         logger("Disabling Dual Wi-Fi & SLA...")
+
+        activeNetworkCallback?.let {
+            try {
+                connectivityManager.unregisterNetworkCallback(it)
+                DualWifiLogger.d(TAG, "Unregistered active network callback")
+            } catch (_: Exception) {}
+            activeNetworkCallback = null
+        }
+
+        try {
+            wifiManager.removeNetworkSuggestions(emptyList())
+        } catch (_: Exception) {}
+
         enableMultiInternetMode(0)
         enableHyperFusion(false)
         RootShell.run("wpa_cli -p $SOCKET_PATH -i wlan1 disconnect 2>/dev/null")

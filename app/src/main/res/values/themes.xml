@@ -1,0 +1,13 @@
+<resources>
+    <style name="Theme.RogDualWifi" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/rog_red</item>
+        <item name="colorPrimaryVariant">@color/rog_dark_red</item>
+        <item name="colorOnPrimary">@color/rog_text_primary</item>
+        <item name="colorSecondary">@color/rog_cyan</item>
+        <item name="colorSecondaryVariant">@color/rog_cyan</item>
+        <item name="colorOnSecondary">@color/rog_black</item>
+        <item name="android:windowBackground">@color/rog_black</item>
+        <item name="android:statusBarColor">@color/rog_black</item>
+        <item name="android:navigationBarColor">@color/rog_black</item>
+    </style>
+</resources>

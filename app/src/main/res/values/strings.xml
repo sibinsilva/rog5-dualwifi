@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">ROG Dual Wi-Fi</string>
+    <string name="title_primary_wifi">Primary Wi-Fi (wlan0)</string>
+    <string name="title_secondary_wifi">Secondary Wi-Fi (wlan1)</string>
+    <string name="title_sla_gaming">Qualcomm SLA / SLS Bonding</string>
+    <string name="status_not_connected">Not Connected</string>
+    <string name="status_idle">Idle</string>
+    <string name="btn_spawn_wlan1">Spawn wlan1 Interface</string>
+    <string name="btn_connect_dual">Connect &amp; Activate Dual Wi-Fi</string>
+    <string name="btn_disconnect_dual">Disconnect Secondary Wi-Fi</string>
+    <string name="hint_ssid">Secondary Wi-Fi SSID</string>
+    <string name="hint_password">Wi-Fi Password</string>
+</resources>

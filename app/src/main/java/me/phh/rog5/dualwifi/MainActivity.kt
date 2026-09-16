@@ -23,7 +23,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityMainBinding
-    private val wifiManager = DualWifiManager()
+    private lateinit var wifiManager: DualWifiManager
     private var pollJob: Job? = null
 
     private val prefs by lazy { getSharedPreferences("dual_wifi_prefs", Context.MODE_PRIVATE) }
@@ -31,6 +31,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         DualWifiLogger.i(TAG, "MainActivity onCreate: Initializing Dual Wi-Fi UI")
+        wifiManager = DualWifiManager(applicationContext)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 

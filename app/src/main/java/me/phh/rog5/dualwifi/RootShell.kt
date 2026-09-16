@@ -1,35 +1,26 @@
 package me.phh.rog5.dualwifi
 
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.OutputStreamWriter
+
 
 object RootShell {
     private const val TAG = "DualWifi_Root"
 
-    private val suBinary: String by lazy {
-        val candidates = listOf(
-            "/system/bin/su",
-            "/system/xbin/su",
-            "/data/adb/ksu/bin/su",
-            "/data/adb/magisk/su",
-            "su"
-        )
-        for (path in candidates) {
-            try {
-                val proc = ProcessBuilder(path, "-v").start()
-                val out = proc.inputStream.bufferedReader().readText().trim()
-                val exit = proc.waitFor()
-                if (exit == 0) {
-                    DualWifiLogger.i(TAG, "Found responsive su binary at '$path' (version: $out)")
-                    return@lazy path
-                }
-            } catch (e: Exception) {
-                DualWifiLogger.v(TAG, "Probing '$path': not responsive (${e.message})")
-            }
+    // Use sh as the launcher - it resolves PATH for us and avoids ProcessBuilder PATH limitations
+    private val SH = "/system/bin/sh"
+
+    // Probe which su variant supports mount-master (-M flag) once at startup
+    private val mountMasterFlag: Boolean by lazy {
+        try {
+            val proc = ProcessBuilder(SH, "-c", "su -M -c id 2>&1").start()
+            val out = proc.inputStream.bufferedReader().readText()
+            val exit = proc.waitFor()
+            val supported = exit == 0 && out.contains("uid=0")
+            DualWifiLogger.i(TAG, "su mount-master (-M) supported: $supported")
+            supported
+        } catch (e: Exception) {
+            DualWifiLogger.w(TAG, "Could not probe su -M: ${e.message}")
+            false
         }
-        DualWifiLogger.w(TAG, "No su candidate verified via '-v', defaulting to '/system/bin/su'")
-        "/system/bin/su"
     }
 
     fun isRootAvailable(): Boolean {
@@ -43,62 +34,45 @@ object RootShell {
         val startTime = System.currentTimeMillis()
         DualWifiLogger.d(TAG, "CMD >>> $cmd")
 
-        // Try mount-master first (-M), fallback to standard shell if -M is rejected
-        val attempts = listOf(
-            listOf(suBinary, "-M"),
-            listOf(suBinary)
-        )
+        // Build the su invocation - prefer mount-master for vendor socket access
+        val suCmd = if (mountMasterFlag) "su -M -c" else "su -c"
 
-        for ((index, cmdPrefix) in attempts.withIndex()) {
-            try {
-                val process = ProcessBuilder(cmdPrefix)
-                    .redirectErrorStream(true)
-                    .start()
+        // Wrap with sh so PATH resolution works inside the app sandbox
+        val shellArgs = listOf(SH, "-c", "$suCmd '${cmd.replace("'", "'\\''")}'")
 
-                OutputStreamWriter(process.outputStream).use { writer ->
-                    writer.write(cmd)
-                    writer.write("\n")
-                    writer.write("exit\n")
-                    writer.flush()
-                }
+        return try {
+            val process = ProcessBuilder(shellArgs)
+                .redirectErrorStream(true)
+                .start()
 
-                val reader = BufferedReader(InputStreamReader(process.inputStream))
-                val output = StringBuilder()
-                var line: String?
-                while (reader.readLine().also { line = it } != null) {
-                    output.appendLine(line)
-                }
-
-                val exitCode = process.waitFor()
-                val duration = System.currentTimeMillis() - startTime
-                val trimmedOut = output.toString().trim()
-
-                if (exitCode == 0) {
-                    DualWifiLogger.d(TAG, "CMD <<< [OK ${duration}ms] (prefix=${cmdPrefix.joinToString(" ")})")
-                    if (trimmedOut.isNotEmpty()) {
-                        for (l in trimmedOut.lines().take(5)) {
-                            DualWifiLogger.v(TAG, "  | $l")
-                        }
-                    }
-                    return CommandResult(exitCode, trimmedOut)
-                } else {
-                    DualWifiLogger.w(TAG, "CMD <<< [FAIL exit=$exitCode in ${duration}ms] output: $trimmedOut")
-                    if (index == 0 && trimmedOut.contains("invalid option -- M")) {
-                        DualWifiLogger.d(TAG, "-M not supported by this su binary, falling back to standard su")
-                        continue
-                    }
-                    return CommandResult(exitCode, trimmedOut)
-                }
-            } catch (e: Exception) {
-                DualWifiLogger.w(TAG, "Attempt with ${cmdPrefix.joinToString(" ")} failed: ${e.message}")
-                if (index < attempts.size - 1) continue
-                val duration = System.currentTimeMillis() - startTime
-                DualWifiLogger.e(TAG, "Execution exception on '$cmd' after ${duration}ms", e)
-                return CommandResult(-1, e.message ?: "Execution exception")
+            val reader = process.inputStream.bufferedReader()
+            val output = StringBuilder()
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                output.appendLine(line)
             }
-        }
 
-        return CommandResult(-1, "Unable to execute root command")
+            val exitCode = process.waitFor()
+            val duration = System.currentTimeMillis() - startTime
+            val trimmedOut = output.toString().trim()
+
+            if (exitCode == 0) {
+                DualWifiLogger.d(TAG, "CMD <<< [OK ${duration}ms]")
+                if (trimmedOut.isNotEmpty()) {
+                    trimmedOut.lines().take(5).forEach { l ->
+                        DualWifiLogger.v(TAG, "  | $l")
+                    }
+                }
+            } else {
+                DualWifiLogger.w(TAG, "CMD <<< [FAIL exit=$exitCode ${duration}ms] out: ${trimmedOut.take(200)}")
+            }
+
+            CommandResult(exitCode, trimmedOut)
+        } catch (e: Exception) {
+            val duration = System.currentTimeMillis() - startTime
+            DualWifiLogger.e(TAG, "Exception executing '$cmd' after ${duration}ms: ${e.message}", e)
+            CommandResult(-1, e.message ?: "Execution exception")
+        }
     }
 
     data class CommandResult(val exitCode: Int, val output: String) {

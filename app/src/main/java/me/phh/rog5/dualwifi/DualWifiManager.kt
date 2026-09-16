@@ -244,7 +244,7 @@ class DualWifiManager(private val context: Context) {
     }
 
     // ---------------------------------------------------------------------------
-    // SLA status — reads kernel node and system properties
+    // SLA status — reads kernel node and interface traffic statistics
     // ---------------------------------------------------------------------------
     suspend fun getSlaStatus(): SlaInfo = withContext(Dispatchers.IO) {
         val slaEnabledProp = getSystemProperty("vendor.sla.enabled", "0") == "1"
@@ -255,11 +255,34 @@ class DualWifiManager(private val context: Context) {
         val psRes = RootShell.run("ps -ef | grep slad 2>/dev/null")
         val daemonRunning = psRes.output.contains("slad")
 
-        val w0 = RootShell.run("cat /proc/sla/wlan0_stats 2>/dev/null").output.trim().toLongOrNull() ?: 0L
-        val w1 = RootShell.run("cat /proc/sla/wlan1_stats 2>/dev/null").output.trim().toLongOrNull() ?: 0L
+        val w0 = getInterfaceTraffic("wlan0")
+        val w1 = getInterfaceTraffic("wlan1")
 
         DualWifiLogger.v(TAG, "SLA Status: enabled=$isEnabled, daemon=$daemonRunning, w0=$w0, w1=$w1")
         SlaInfo(isEnabled, daemonRunning, w0, w1)
+    }
+
+    private fun getInterfaceTraffic(iface: String): Long {
+        try {
+            val file = java.io.File("/proc/net/dev")
+            if (file.exists()) {
+                for (line in file.readLines()) {
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("$iface:")) {
+                        val stats = trimmed.removePrefix("$iface:").trim().split(Regex("\\s+"))
+                        if (stats.size >= 9) {
+                            val rx = stats[0].toLongOrNull() ?: 0L
+                            val tx = stats[8].toLongOrNull() ?: 0L
+                            return rx + tx
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        val rx = RootShell.run("cat /sys/class/net/$iface/statistics/rx_bytes 2>/dev/null").output.trim().toLongOrNull() ?: 0L
+        val tx = RootShell.run("cat /sys/class/net/$iface/statistics/tx_bytes 2>/dev/null").output.trim().toLongOrNull() ?: 0L
+        return rx + tx
     }
 
     // ---------------------------------------------------------------------------

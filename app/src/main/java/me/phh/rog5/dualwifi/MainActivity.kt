@@ -1,7 +1,9 @@
 package me.phh.rog5.dualwifi
 
-import android.graphics.Color
+import android.content.Context
 import android.os.Bundle
+import android.view.View
+import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -17,11 +19,14 @@ class MainActivity : AppCompatActivity() {
     private val wifiManager = DualWifiManager()
     private var pollJob: Job? = null
 
+    private val prefs by lazy { getSharedPreferences("dual_wifi_prefs", Context.MODE_PRIVATE) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        setupUI()
         setupListeners()
     }
 
@@ -35,74 +40,146 @@ class MainActivity : AppCompatActivity() {
         pollJob?.cancel()
     }
 
+    private fun setupUI() {
+        val savedSsid = prefs.getString("saved_ssid", null)
+        if (savedSsid != null) {
+            binding.tvSecondarySsid.text = savedSsid
+            binding.btnSelectNetwork.text = "Change Network ($savedSsid)"
+        }
+    }
+
     private fun setupListeners() {
-        binding.btnScan.setOnClickListener {
-            lifecycleScope.launch {
-                binding.btnScan.isEnabled = false
-                binding.btnScan.text = "Scanning..."
-                log("Scanning nearby Wi-Fi networks...")
-
-                val networks = wifiManager.scanNetworks()
-                binding.btnScan.isEnabled = true
-                binding.btnScan.text = "Scan Networks"
-
-                if (networks.isEmpty()) {
-                    log("No networks found or scan permission missing.")
-                    return@launch
+        // Master Switch Toggle
+        binding.switchDualWifi.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                val savedSsid = prefs.getString("saved_ssid", null)
+                val savedPass = prefs.getString("saved_pass", "") ?: ""
+                if (savedSsid.isNullOrEmpty()) {
+                    showNetworkPicker()
+                } else {
+                    connectToSecondary(savedSsid, savedPass)
                 }
+            } else {
+                disconnectSecondary()
+            }
+        }
 
-                log("Found ${networks.size} networks. Showing list...")
-                val items = networks.map { net ->
-                    val bandBadge = if (net.is5GHz) "⚡ 5 GHz" else "2.4 GHz"
-                    "${net.ssid}\n  [$bandBadge]  Signal: ${net.level} dBm"
-                }.toTypedArray()
+        // Scan & Select Secondary Network
+        binding.btnSelectNetwork.setOnClickListener {
+            showNetworkPicker()
+        }
 
+        // Mode Toggles
+        binding.rbModeGaming.setOnClickListener {
+            binding.rbModeGaming.isChecked = true
+            binding.rbModeSpeed.isChecked = false
+            log("Acceleration mode set to Gaming Low-Latency (SLS)")
+        }
+        binding.layoutModeGaming.setOnClickListener { binding.rbModeGaming.performClick() }
+
+        binding.rbModeSpeed.setOnClickListener {
+            binding.rbModeSpeed.isChecked = true
+            binding.rbModeGaming.isChecked = false
+            log("Acceleration mode set to Download Booster (SLA)")
+        }
+        binding.layoutModeSpeed.setOnClickListener { binding.rbModeSpeed.performClick() }
+
+        // Advanced Diagnostics Drawer Toggle
+        binding.layoutToggleDebug.setOnClickListener {
+            val isVisible = binding.layoutDebugContent.visibility == View.VISIBLE
+            binding.layoutDebugContent.visibility = if (isVisible) View.GONE else View.VISIBLE
+            binding.tvToggleArrow.text = if (isVisible) "▼ Show" else "▲ Hide"
+        }
+    }
+
+    private fun showNetworkPicker() {
+        lifecycleScope.launch {
+            binding.btnSelectNetwork.isEnabled = false
+            binding.btnSelectNetwork.text = "Scanning nearby networks..."
+            log("Scanning for nearby 5 GHz and 2.4 GHz access points...")
+
+            val networks = wifiManager.scanNetworks()
+            binding.btnSelectNetwork.isEnabled = true
+            val savedSsid = prefs.getString("saved_ssid", null)
+            binding.btnSelectNetwork.text = if (savedSsid != null) "Change Network ($savedSsid)" else "Scan & Select Secondary Network"
+
+            if (networks.isEmpty()) {
                 MaterialAlertDialogBuilder(this@MainActivity)
-                    .setTitle("Select Secondary Network")
-                    .setItems(items) { _, which ->
-                        val selected = networks[which]
-                        binding.etSsid.setText(selected.ssid)
-                        log("Selected: ${selected.ssid} (${selected.bandLabel})")
-                        binding.etPassword.requestFocus()
-                    }
-                    .setNegativeButton("Cancel", null)
+                    .setTitle("No Networks Found")
+                    .setMessage("Make sure Wi-Fi is enabled and location permission is granted.")
+                    .setPositiveButton("OK", null)
                     .show()
+                return@launch
             }
+
+            val items = networks.map { net ->
+                val badge = if (net.is5GHz) "⚡ 5 GHz DBS" else "2.4 GHz"
+                "${net.ssid}\n[$badge] • Signal: ${net.level} dBm"
+            }.toTypedArray()
+
+            MaterialAlertDialogBuilder(this@MainActivity)
+                .setTitle("Select Secondary Wi-Fi")
+                .setItems(items) { _, which ->
+                    val selected = networks[which]
+                    promptPasswordAndConnect(selected.ssid)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+    }
+
+    private fun promptPasswordAndConnect(ssid: String) {
+        val input = EditText(this).apply {
+            hint = "Wi-Fi Password"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            setPadding(48, 32, 48, 32)
         }
 
-        binding.btnSpawnWlan1.setOnClickListener {
-            lifecycleScope.launch {
-                binding.btnSpawnWlan1.isEnabled = false
-                wifiManager.spawnWlan1 { log(it) }
-                binding.btnSpawnWlan1.isEnabled = true
-                refreshStatus()
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Connect to $ssid")
+            .setMessage("Enter the password for your secondary network:")
+            .setView(input)
+            .setPositiveButton("Connect") { _, _ ->
+                val pass = input.text.toString()
+                prefs.edit().putString("saved_ssid", ssid).putString("saved_pass", pass).apply()
+                binding.tvSecondarySsid.text = ssid
+                binding.btnSelectNetwork.text = "Change Network ($ssid)"
+                binding.switchDualWifi.isChecked = true
+                connectToSecondary(ssid, pass)
             }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun connectToSecondary(ssid: String, pass: String) {
+        lifecycleScope.launch {
+            binding.tvSecondarySub.text = "Connecting to $ssid..."
+            binding.tvSecondaryBadge.text = "Connecting..."
+            log("Activating dual Wi-Fi with $ssid...")
+
+            // Auto spawn if needed
+            wifiManager.spawnWlan1 { log(it) }
+
+            val success = wifiManager.connectSecondary(ssid, pass) { log(it) }
+            if (success) {
+                binding.tvSecondarySub.text = "Connected & Accelerated"
+                binding.tvSecondaryBadge.text = "⚡ Accelerated"
+                binding.switchDualWifi.isChecked = true
+            } else {
+                binding.tvSecondarySub.text = "Connection failed - tap to retry"
+                binding.tvSecondaryBadge.text = "Failed"
+                binding.switchDualWifi.isChecked = false
+            }
+            refreshStatus()
         }
+    }
 
-        binding.btnConnectDual.setOnClickListener {
-            val ssid = binding.etSsid.text.toString().trim()
-            val pass = binding.etPassword.text.toString()
-
-            if (ssid.isEmpty()) {
-                log("Please enter a secondary Wi-Fi SSID")
-                return@setOnClickListener
-            }
-
-            lifecycleScope.launch {
-                binding.btnConnectDual.isEnabled = false
-                wifiManager.connectSecondary(ssid, pass) { log(it) }
-                binding.btnConnectDual.isEnabled = true
-                refreshStatus()
-            }
-        }
-
-        binding.btnDisconnect.setOnClickListener {
-            lifecycleScope.launch {
-                binding.btnDisconnect.isEnabled = false
-                wifiManager.disconnectSecondary { log(it) }
-                binding.btnDisconnect.isEnabled = true
-                refreshStatus()
-            }
+    private fun disconnectSecondary() {
+        lifecycleScope.launch {
+            binding.tvSecondarySub.text = "Disconnected"
+            binding.tvSecondaryBadge.text = "Offline"
+            wifiManager.disconnectSecondary { log(it) }
+            refreshStatus()
         }
     }
 
@@ -121,17 +198,26 @@ class MainActivity : AppCompatActivity() {
         val w1 = wifiManager.getInterfaceStatus("wlan1")
         val sla = wifiManager.getSlaStatus()
 
-        // Update wlan0 Card
-        binding.tvWlan0Status.text = if (w0.isUp) "ACTIVE" else "OFFLINE"
-        binding.tvWlan0Details.text = "SSID: ${w0.ssid ?: "Unknown"}\nIP: ${w0.ip ?: "-"}\nBand: ${if (w0.freq > 4000) "5 GHz" else "2.4 GHz"} (${w0.freq} MHz)"
+        // Update Primary (wlan0)
+        binding.tvPrimarySsid.text = w0.ssid ?: "Not Connected"
+        binding.tvPrimarySub.text = if (w0.isUp && w0.ip != null) "IP: ${w0.ip}" else "Offline"
+        binding.tvPrimaryBadge.text = if (w0.freq > 4000) "5 GHz" else "2.4 GHz"
 
-        // Update wlan1 Card
-        binding.tvWlan1Status.text = if (w1.isUp && w1.ip != null) "CONNECTED" else if (w1.isUp) "SPAWNED" else "OFFLINE"
-        binding.tvWlan1Details.text = "SSID: ${w1.ssid ?: "-"}\nIP: ${w1.ip ?: "-"}\nBand: ${if (w1.freq > 4000) "5 GHz" else if (w1.freq > 0) "2.4 GHz" else "-"} (${w1.freq} MHz)"
+        // Update Secondary (wlan1)
+        if (w1.isUp && w1.ip != null) {
+            binding.tvSecondarySsid.text = w1.ssid ?: "Secondary Wi-Fi"
+            binding.tvSecondarySub.text = "IP: ${w1.ip} • Accelerated"
+            binding.tvSecondaryBadge.text = "⚡ 5 GHz DBS"
+            binding.ivSecondaryIcon.setColorFilter(getColor(com.google.android.material.R.color.material_dynamic_primary40))
+        } else if (w1.isUp) {
+            binding.tvSecondarySub.text = "Antenna ready, connecting..."
+            binding.tvSecondaryBadge.text = "Ready"
+        }
 
-        // Update SLA Card
-        binding.tvSlaStatus.text = if (sla.isEnabled) "ACTIVE (BONDING)" else "STANDBY"
-        binding.tvSlaDetails.text = "Kernel Node: /proc/sla/config (${if (sla.isEnabled) "enable=1" else "idle"})\nDaemon: ${if (sla.daemonRunning) "slad-v2 (Running)" else "Stopped"}\nwlan0 Routed: ${formatBytes(sla.bytesWlan0)} | wlan1 Routed: ${formatBytes(sla.bytesWlan1)}"
+        // Update Advanced Diagnostics text
+        binding.tvAdvancedStats.text = "Kernel Node: /proc/sla/config (${if (sla.isEnabled) "enable=1" else "idle"})\n" +
+                "Daemon: ${if (sla.daemonRunning) "slad-v2 (Active)" else "Stopped"}\n" +
+                "wlan0 Traffic: ${formatBytes(sla.bytesWlan0)} | wlan1 Traffic: ${formatBytes(sla.bytesWlan1)}"
     }
 
     private fun formatBytes(bytes: Long): String {
@@ -145,7 +231,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun log(msg: String) {
         val current = binding.tvLog.text.toString()
-        val lines = current.lines().takeLast(8).joinToString("\n")
+        val lines = current.lines().takeLast(6).joinToString("\n")
         binding.tvLog.text = "$lines\n> $msg"
     }
 }

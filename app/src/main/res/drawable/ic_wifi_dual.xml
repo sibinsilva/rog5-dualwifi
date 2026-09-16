@@ -1,15 +1,49 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- Outer 5 GHz DBS Primary Wave (Cyan Gradient) -->
     <path
-        android:fillColor="#FF0033"
-        android:pathData="M54,18 C33,18 14.2,26.7 0.9,40.6 L11.4,51.8 C22.2,40.9 37.3,34 54,34 C70.7,34 85.8,40.9 96.6,51.8 L107.1,40.6 C93.8,26.7 75,18 54,18 Z" />
+        android:pathData="M54,20 C35.2,20 18.1,27.5 5.6,39.9 L14.1,48.4 C24.4,38.1 38.4,32 54,32 C69.6,32 83.6,38.1 93.9,48.4 L102.4,39.9 C89.9,27.5 72.8,20 54,20 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="5.6"
+                android:startY="34"
+                android:endX="102.4"
+                android:endY="34"
+                android:type="linear">
+                <item android:color="#00E5FF" android:offset="0.0" />
+                <item android:color="#38BDF8" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Inner Secondary Wave (Violet / Purple Gradient) -->
     <path
-        android:fillColor="#00E5FF"
-        android:pathData="M54,38 C40.5,38 28.3,43.6 19.6,52.6 L30.2,63.8 C36.2,57.7 44.6,54 54,54 C63.4,54 71.8,57.7 77.8,63.8 L88.4,52.6 C79.7,43.6 67.5,38 54,38 Z" />
+        android:pathData="M54,40 C42.1,40 31.3,44.7 23.3,52.4 L31.8,60.9 C37.6,55.4 45.4,52 54,52 C62.6,52 70.4,55.4 76.2,60.9 L84.7,52.4 C76.7,44.7 65.9,40 54,40 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="23.3"
+                android:startY="50"
+                android:endX="84.7"
+                android:endY="50"
+                android:type="linear">
+                <item android:color="#C084FC" android:offset="0.0" />
+                <item android:color="#818CF8" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Lightning / Acceleration Core -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,58 C47.4,58 41.5,60.7 37.2,65.2 L54,83 L70.8,65.2 C66.5,60.7 60.6,58 54,58 Z" />
+        android:pathData="M52,60 L43,73 L51,73 L49,84 L60,70 L52,70 Z"
+        android:fillColor="#00E5FF" />
+
+    <!-- Center Node Dot -->
+    <path
+        android:pathData="M54,79 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"
+        android:fillColor="#38BDF8" />
 </vector>

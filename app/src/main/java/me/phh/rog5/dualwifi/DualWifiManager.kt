@@ -11,6 +11,16 @@ class DualWifiManager(private val context: Context) {
     companion object {
         private const val TAG = "DualWifi_Manager"
         private const val SOCKET_PATH = "/data/vendor/wifi/wpa/sockets"
+
+        fun getSystemProperty(key: String, default: String = ""): String {
+            return try {
+                val spClass = Class.forName("android.os.SystemProperties")
+                val getMethod = spClass.getMethod("get", String::class.java, String::class.java)
+                getMethod.invoke(null, key, default) as String
+            } catch (_: Exception) {
+                default
+            }
+        }
     }
 
     data class InterfaceInfo(
@@ -172,6 +182,29 @@ class DualWifiManager(private val context: Context) {
     }
 
     // ---------------------------------------------------------------------------
+    // Spawn secondary wlan1 interface (optional helper)
+    // ---------------------------------------------------------------------------
+    suspend fun spawnWlan1(logger: (String) -> Unit): Boolean = withContext(Dispatchers.IO) {
+        DualWifiLogger.i(TAG, "Spawning secondary wlan1 interface...")
+        logger("Requesting wlan1 interface spawn via wificond...")
+
+        val res = RootShell.run("service call wifinl80211 1 s16 'wlan1'")
+        logger("wificond response: ${res.output.lines().firstOrNull() ?: "OK"}")
+
+        val check = RootShell.run("ip link show wlan1")
+        val success = check.isSuccess && !check.output.contains("does not exist")
+        if (success) {
+            DualWifiLogger.i(TAG, "wlan1 interface is present, bringing UP")
+            logger("wlan1 created successfully!")
+            RootShell.run("ip link set dev wlan1 up")
+        } else {
+            DualWifiLogger.w(TAG, "wlan1 not created directly by wificond (${check.output.trim()})")
+            logger("Notice: wlan1 was not spawned by wificond directly (${check.output.trim()}).")
+        }
+        success
+    }
+
+    // ---------------------------------------------------------------------------
     // Interface status — uses WifiManager for wlan0, root for wlan1
     // ---------------------------------------------------------------------------
     suspend fun getInterfaceStatus(iface: String): InterfaceInfo = withContext(Dispatchers.IO) {
@@ -214,9 +247,7 @@ class DualWifiManager(private val context: Context) {
     // SLA status — reads kernel node and system properties
     // ---------------------------------------------------------------------------
     suspend fun getSlaStatus(): SlaInfo = withContext(Dispatchers.IO) {
-        val slaEnabledProp = try {
-            android.os.SystemProperties.get("vendor.sla.enabled", "0") == "1"
-        } catch (_: Exception) { false }
+        val slaEnabledProp = getSystemProperty("vendor.sla.enabled", "0") == "1"
 
         val procConfig = RootShell.run("cat /proc/sla/config 2>/dev/null")
         val isEnabled = slaEnabledProp || procConfig.output.contains("enable=1")
@@ -327,7 +358,7 @@ class DualWifiManager(private val context: Context) {
         sb.appendLine("4. /proc/sla/config: ${if (slaRes.isSuccess) slaRes.output.lines().firstOrNull() else "No access (${slaRes.exitCode})"}")
 
         // 5. vendor.sla.enabled property
-        val slaProp = try { android.os.SystemProperties.get("vendor.sla.enabled", "0") } catch (_: Exception) { "N/A" }
+        val slaProp = getSystemProperty("vendor.sla.enabled", "0")
         sb.appendLine("5. vendor.sla.enabled: $slaProp")
 
         // 6. Root check

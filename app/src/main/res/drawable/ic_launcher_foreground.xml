@@ -1,0 +1,51 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Outer 5 GHz DBS Primary Wave (Cyan Gradient) -->
+    <path
+        android:pathData="M54,26 C38.5,26 24.3,32.2 14,42.4 L21.1,49.5 C29.5,41.2 41.1,36 54,36 C66.9,36 78.5,41.2 86.9,49.5 L94,42.4 C83.7,32.2 69.5,26 54,26 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="14"
+                android:startY="38"
+                android:endX="94"
+                android:endY="38"
+                android:type="linear">
+                <item android:color="#00E5FF" android:offset="0.0" />
+                <item android:color="#38BDF8" android:offset="0.5" />
+                <item android:color="#0284C7" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Inner Secondary Wave (Violet Gradient) -->
+    <path
+        android:pathData="M54,44 C43.2,44 33.3,48.3 26,55.3 L33.1,62.4 C38.5,57.2 45.9,54 54,54 C62.1,54 69.5,57.2 74.9,62.4 L82,55.3 C74.7,48.3 64.8,44 54,44 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="26"
+                android:startY="53"
+                android:endX="82"
+                android:endY="53"
+                android:type="linear">
+                <item android:color="#C084FC" android:offset="0.0" />
+                <item android:color="#A855F7" android:offset="0.5" />
+                <item android:color="#6366F1" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Dual Lightning / Acceleration Core -->
+    <path
+        android:pathData="M52,60 L44,72 L51,72 L49,82 L59,69 L52,69 Z"
+        android:fillColor="#00E5FF" />
+
+    <!-- Center Pulse Dot -->
+    <path
+        android:pathData="M54,78 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"
+        android:fillColor="#38BDF8" />
+</vector>

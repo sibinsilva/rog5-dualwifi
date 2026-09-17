@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.NetworkSpecifier
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
 import android.net.wifi.WifiNetworkSpecifier
@@ -42,7 +43,9 @@ class DualWifiManager(private val context: Context) {
         val ssid: String? = null,
         val freq: Int = 0,
         val linkSpeed: Int = 0
-    )
+    ) {
+        val is5GHz: Boolean get() = freq > 4000
+    }
 
     data class SlaInfo(
         val isEnabled: Boolean,
@@ -436,21 +439,39 @@ class DualWifiManager(private val context: Context) {
             val targetBand = if (primaryStatus.is5GHz) ScanResult.WIFI_BAND_24_GHZ else ScanResult.WIFI_BAND_5_GHZ
             DualWifiLogger.i(TAG, "Multi-Internet target band: $targetBand (Primary freq=${primaryStatus.freq} MHz, is5GHz=${primaryStatus.is5GHz})")
 
-            val specifierBuilder = WifiNetworkSpecifier.Builder()
-            try {
-                val method = specifierBuilder.javaClass.getMethod("setBand", Int::class.javaPrimitiveType)
-                method.invoke(specifierBuilder, targetBand)
+            val specifier: NetworkSpecifier? = try {
+                val specifierBuilder = WifiNetworkSpecifier.Builder()
+                try {
+                    val method = specifierBuilder.javaClass.getMethod("setBand", Int::class.javaPrimitiveType)
+                    method.invoke(specifierBuilder, targetBand)
+                } catch (t: Throwable) {
+                    DualWifiLogger.w(TAG, "setBand reflection: ${t.message}")
+                }
+                specifierBuilder.build()
             } catch (t: Throwable) {
-                DualWifiLogger.w(TAG, "setBand reflection: ${t.message}")
+                DualWifiLogger.w(TAG, "WifiNetworkSpecifier without SSID failed: ${t.message}, adding SSID $ssid")
+                try {
+                    val specifierBuilder = WifiNetworkSpecifier.Builder().setSsid(ssid)
+                    try {
+                        val method = specifierBuilder.javaClass.getMethod("setBand", Int::class.javaPrimitiveType)
+                        method.invoke(specifierBuilder, targetBand)
+                    } catch (_: Throwable) {}
+                    specifierBuilder.build()
+                } catch (t2: Throwable) {
+                    DualWifiLogger.w(TAG, "WifiNetworkSpecifier fallback failed: ${t2.message}")
+                    null
+                }
             }
-            val specifier = specifierBuilder.build()
 
-            val request = NetworkRequest.Builder()
+            val requestBuilder = NetworkRequest.Builder()
                 .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
-                .setNetworkSpecifier(specifier)
-                .build()
+
+            if (specifier != null) {
+                requestBuilder.setNetworkSpecifier(specifier)
+            }
+            val request = requestBuilder.build()
 
             val callback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {

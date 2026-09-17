@@ -267,7 +267,18 @@ class DualWifiManager(private val context: Context) {
 
         // Check if wlan1 is already up
         val check = RootShell.run("ip link show wlan1 2>/dev/null")
-        val exists = check.isSuccess && !check.output.contains("does not exist") && check.output.isNotEmpty()
+        var exists = check.isSuccess && !check.output.contains("does not exist") && check.output.isNotEmpty()
+
+        // If not, check if secondary RF chain was assigned to wifi-aware0 and reallocate to wlan1
+        if (!exists) {
+            val awareCheck = RootShell.run("ip link show wifi-aware0 2>/dev/null")
+            if (awareCheck.isSuccess && awareCheck.output.contains("wifi-aware0")) {
+                DualWifiLogger.i(TAG, "Reallocating secondary RF chain from wifi-aware0 to wlan1")
+                RootShell.run("ip link set dev wifi-aware0 name wlan1 2>/dev/null")
+                exists = true
+            }
+        }
+
         if (exists) {
             DualWifiLogger.i(TAG, "wlan1 interface is present, bringing UP")
             RootShell.run("ip link set dev wlan1 up 2>/dev/null")
@@ -275,9 +286,9 @@ class DualWifiManager(private val context: Context) {
             return@withContext true
         }
 
-        // Trigger STA interface spawn via Multi-Internet warden
+        // Trigger STA interface spawn via wificond createClientInterface (transaction 2)
         DualWifiLogger.d(TAG, "Requesting additional STA interface from Wi-Fi framework...")
-        RootShell.run("service call wifinl80211 1 s16 'wlan1' 2>/dev/null")
+        RootShell.run("service call wifinl80211 2 s16 'wlan1' 2>/dev/null")
         RootShell.run("cmd wifi start-scan 2>/dev/null")
 
         val checkAfter = RootShell.run("ip link show wlan1 2>/dev/null")
@@ -414,16 +425,31 @@ class DualWifiManager(private val context: Context) {
             DualWifiLogger.w(TAG, "addNetworkSuggestions warning: ${t.message}")
         }
 
-        // 4. Register NetworkRequest for Multi-Internet connectivity (NO Specifier, to avoid AOSP rejection)
+        // 4. Register NetworkRequest for Multi-Internet connectivity with target band
         try {
             activeNetworkCallback?.let {
                 try { connectivityManager.unregisterNetworkCallback(it) } catch (_: Exception) {}
             }
 
+            val primaryStatus = getInterfaceStatus("wlan0")
+            // DBS requires opposite bands: if primary is 5GHz, secondary must be 2.4GHz, and vice versa
+            val targetBand = if (primaryStatus.is5GHz) ScanResult.WIFI_BAND_24_GHZ else ScanResult.WIFI_BAND_5_GHZ
+            DualWifiLogger.i(TAG, "Multi-Internet target band: $targetBand (Primary freq=${primaryStatus.freq} MHz, is5GHz=${primaryStatus.is5GHz})")
+
+            val specifierBuilder = WifiNetworkSpecifier.Builder()
+            try {
+                val method = specifierBuilder.javaClass.getMethod("setBand", Int::class.javaPrimitiveType)
+                method.invoke(specifierBuilder, targetBand)
+            } catch (t: Throwable) {
+                DualWifiLogger.w(TAG, "setBand reflection: ${t.message}")
+            }
+            val specifier = specifierBuilder.build()
+
             val request = NetworkRequest.Builder()
                 .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+                .setNetworkSpecifier(specifier)
                 .build()
 
             val callback = object : ConnectivityManager.NetworkCallback() {
@@ -442,7 +468,7 @@ class DualWifiManager(private val context: Context) {
 
             activeNetworkCallback = callback
             connectivityManager.requestNetwork(request, callback)
-            DualWifiLogger.i(TAG, "ConnectivityManager.requestNetwork registered for $ssid (Multi-Internet)")
+            DualWifiLogger.i(TAG, "ConnectivityManager.requestNetwork registered for $ssid (Multi-Internet band $targetBand)")
             logger("Multi-Internet network request active for $ssid")
         } catch (t: Throwable) {
             DualWifiLogger.w(TAG, "ConnectivityManager requestNetwork warning: ${t.message}")

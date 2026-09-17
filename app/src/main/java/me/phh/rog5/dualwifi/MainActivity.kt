@@ -15,6 +15,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import me.phh.rog5.dualwifi.databinding.ActivityMainBinding
+import me.phh.rog5.dualwifi.databinding.DialogWifiPasswordBinding
 
 class MainActivity : AppCompatActivity() {
 
@@ -275,18 +276,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun promptPasswordAndConnect(ssid: String) {
-        val input = EditText(this).apply {
-            hint = "Wi-Fi Password"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setPadding(48, 32, 48, 32)
+        val dialogBinding = DialogWifiPasswordBinding.inflate(layoutInflater)
+        val savedPass = wifiManager.getSavedPassword(ssid)
+        if (!savedPass.isNullOrEmpty()) {
+            dialogBinding.etPassword.setText(savedPass)
+            dialogBinding.etPassword.setSelection(savedPass.length)
         }
 
         MaterialAlertDialogBuilder(this)
             .setTitle("Connect to $ssid")
             .setMessage("Enter password (network will be saved for automatic reuse):")
-            .setView(input)
+            .setView(dialogBinding.root)
             .setPositiveButton("Connect & Save") { _, _ ->
-                val pass = input.text.toString()
+                val pass = dialogBinding.etPassword.text?.toString() ?: ""
                 wifiManager.saveNetworkCredentials(ssid, pass)
                 binding.tvSecondarySsid.text = ssid
                 binding.btnSelectNetwork.text = "Change Network ($ssid)"

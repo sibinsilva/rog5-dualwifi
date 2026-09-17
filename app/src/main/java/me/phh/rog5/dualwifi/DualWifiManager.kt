@@ -386,14 +386,16 @@ class DualWifiManager(private val context: Context) {
         enableMultiInternetMode(2)
         enableHyperFusion(true)
 
-        // 2. Grant suggestions permissions
+        // 2. Grant suggestions permissions and save network in WifiConfigManager
         RootShell.run("cmd wifi network-suggestions-set-user-approved ${context.packageName} yes")
         RootShell.run("cmd wifi network-suggestions-set-user-approved com.android.shell yes")
 
-        // 3. Add Network Suggestion via Shell & Framework API
+        // Ensure network is saved and autojoin enabled in WifiConfigManager (clears user-disabled flags)
         if (psk.isNotEmpty()) {
+            RootShell.run("cmd wifi add-network '$ssid' wpa2 '$psk'")
             RootShell.run("cmd wifi add-suggestion '$ssid' wpa2 '$psk' -s")
         } else {
+            RootShell.run("cmd wifi add-network '$ssid' open")
             RootShell.run("cmd wifi add-suggestion '$ssid' open -s")
         }
 
@@ -412,21 +414,16 @@ class DualWifiManager(private val context: Context) {
             DualWifiLogger.w(TAG, "addNetworkSuggestions warning: ${t.message}")
         }
 
-        // 4. Register NetworkRequest for Multi-Internet connectivity
+        // 4. Register NetworkRequest for Multi-Internet connectivity (NO Specifier, to avoid AOSP rejection)
         try {
             activeNetworkCallback?.let {
                 try { connectivityManager.unregisterNetworkCallback(it) } catch (_: Exception) {}
             }
 
-            val specifierBuilder = WifiNetworkSpecifier.Builder().setSsid(ssid)
-            if (psk.isNotEmpty()) {
-                specifierBuilder.setWpa2Passphrase(psk)
-            }
-
             val request = NetworkRequest.Builder()
                 .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .setNetworkSpecifier(specifierBuilder.build())
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
                 .build()
 
             val callback = object : ConnectivityManager.NetworkCallback() {
@@ -445,7 +442,7 @@ class DualWifiManager(private val context: Context) {
 
             activeNetworkCallback = callback
             connectivityManager.requestNetwork(request, callback)
-            DualWifiLogger.i(TAG, "ConnectivityManager.requestNetwork registered for $ssid")
+            DualWifiLogger.i(TAG, "ConnectivityManager.requestNetwork registered for $ssid (Multi-Internet)")
             logger("Multi-Internet network request active for $ssid")
         } catch (t: Throwable) {
             DualWifiLogger.w(TAG, "ConnectivityManager requestNetwork warning: ${t.message}")
